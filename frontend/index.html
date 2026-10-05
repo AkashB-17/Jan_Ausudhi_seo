@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jan Aushadhi Finder — Branded vs Generic Price Comparison</title>
+  <meta name="description" content="Find Jan Aushadhi / PMBI generic equivalents for branded medicines and compare listed prices.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..800;1,14..32,300..800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+  <!-- ── Top navigation ─────────────────────────────────────── -->
+  <header class="site-header" role="banner">
+    <div class="site-header__inner">
+      <a href="#" class="wordmark" id="brand-home" aria-label="Jan Aushadhi Finder — go to home">
+        <span class="wordmark__pill" aria-hidden="true">JA</span>
+        <span class="wordmark__text">Jan Aushadhi <span class="wordmark__text-light">Finder</span></span>
+      </a>
+      <nav class="site-nav" aria-label="Primary navigation">
+        <button type="button" class="site-nav__item is-active" id="nav-search">Search</button>
+        <button type="button" class="site-nav__item" id="nav-how">How it works</button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ── Hero (shown only on home) ──────────────────────────── -->
+  <section id="hero" class="hero" aria-label="Introduction">
+    <div class="hero__inner">
+      <div class="hero__eyebrow">Pradhan Mantri Bhartiya Janaushadhi Pariyojana</div>
+      <h1 class="hero__title">Find a branded medicine.<br>See the Jan Aushadhi price.</h1>
+      <p class="hero__lead">
+        Search any branded medicine, discover composition-matched PMBI generics,
+        and see the listed price difference — all from one place.
+      </p>
+    </div>
+  </section>
+
+  <!-- ── Search bar (always visible) ───────────────────────── -->
+  <div class="search-wrap" id="search-wrap">
+    <div class="search-box" role="search">
+      <label class="sr-only" for="search-input">Search medicine by brand name</label>
+      <span class="search-box__icon" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="7.5"/>
+          <path d="M20.5 20.5l-4-4"/>
+        </svg>
+      </span>
+      <input
+        type="search"
+        id="search-input"
+        class="search-box__input"
+        placeholder="Type a brand name — e.g. Azee, Crocin, Fluconazole"
+        autocomplete="off"
+        spellcheck="false"
+        autofocus
+        aria-label="Search medicine by brand name"
+      >
+      <button type="button" id="search-clear" class="search-box__clear hidden" aria-label="Clear search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <p class="search-hint" id="search-hint">Enter at least 2 characters to search</p>
+    <p id="search-examples" class="search-examples" aria-label="Example searches">
+      Try:
+      <button type="button" class="pill-chip" data-query="A Clo P">A Clo P</button>
+      <button type="button" class="pill-chip" data-query="Azee">Azee</button>
+      <button type="button" class="pill-chip" data-query="Fluconazole">Fluconazole</button>
+      <button type="button" class="pill-chip" data-query="Metformin">Metformin</button>
+    </p>
+  </div>
+
+  <!-- ── Status / loading / error banner ───────────────────── -->
+  <div id="status-area" class="status-area hidden" role="status" aria-live="polite"></div>
+
+  <!-- ── Dynamic content area ──────────────────────────────── -->
+  <main id="content-area" class="content-area"></main>
+
+  <!-- ── How it works steps (home only) ────────────────────── -->
+  <section id="home-steps" class="steps-section" aria-label="How it works">
+    <div class="steps-section__inner">
+      <h2 class="steps-section__title">How it works</h2>
+      <ol class="steps-list" role="list">
+        <li class="step-item">
+          <div class="step-item__number" aria-hidden="true">1</div>
+          <div class="step-item__body">
+            <div class="step-item__label">Search</div>
+            <p>Enter a branded medicine name to look it up in our database.</p>
+          </div>
+        </li>
+        <li class="step-item">
+          <div class="step-item__number" aria-hidden="true">2</div>
+          <div class="step-item__body">
+            <div class="step-item__label">Match</div>
+            <p>We find PMBI Jan Aushadhi products with the same composition, strength and dosage form.</p>
+          </div>
+        </li>
+        <li class="step-item">
+          <div class="step-item__number" aria-hidden="true">3</div>
+          <div class="step-item__body">
+            <div class="step-item__label">Compare</div>
+            <p>See the listed price side-by-side. Pack sizes are shown clearly so you can judge fairly.</p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="data-note">
+        <span class="data-note__icon" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+          </svg>
+        </span>
+        <div>
+          <strong>Match confidence ≠ clinical equivalence.</strong>
+          Matches are based on composition and form data from PMBI's drug list.
+          Always consult a qualified pharmacist or doctor before switching medicines.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Footer ────────────────────────────────────────────── -->
+  <footer class="site-footer" role="contentinfo">
+    <div class="site-footer__inner">
+      <p class="site-footer__disclaimer">
+        <strong>Informational use only.</strong>
+        Matches are based on database composition rules and do not constitute medical advice
+        or a recommendation to substitute medicines. Prices shown are listed MRP from PMBI data
+        and may not reflect current store prices. Consult a qualified healthcare professional
+        before changing any medication.
+      </p>
+      <p class="site-footer__source">
+        Data source: Pradhan Mantri Bhartiya Janaushadhi Pariyojana (PMBI) product list.
+      </p>
+    </div>
+  </footer>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
