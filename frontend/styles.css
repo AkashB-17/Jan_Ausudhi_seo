@@ -1883,6 +1883,204 @@ img, svg { display: block; }
 .btn-primary:hover { background: var(--c-brand-dark); }
 .btn-primary:active { transform: translateY(1px); }
 
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--c-surface);
+  color: var(--c-text);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-pill);
+  padding: 0.6rem 1.25rem;
+  font-weight: var(--fw-semibold);
+  font-size: 0.88rem;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.btn-secondary:hover { border-color: var(--c-brand); background: var(--c-surface-2); }
+
+/* ── Kendra finder ──────────────────────────────────────────── */
+.kendra-page { margin-top: 2rem; }
+
+.kendra-page__title {
+  font-family: var(--ff-display);
+  font-size: clamp(1.8rem, 4.5vw, 2.6rem);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.1;
+  margin-bottom: 0.75rem;
+}
+
+.kendra-page__lead {
+  font-size: 0.98rem;
+  color: var(--c-text-muted);
+  max-width: 40rem;
+  margin-bottom: 1.5rem;
+}
+
+.kendra-page__lead strong { color: var(--c-text); }
+
+.kendra-form {
+  padding: 1.25rem 1.35rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.kendra-form__label {
+  display: block;
+  font-family: var(--ff-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-text-faint);
+  margin-bottom: 0.5rem;
+}
+
+.kendra-form__row { display: flex; gap: 0.6rem; }
+
+.kendra-form__input {
+  flex: 1;
+  min-width: 0;
+  height: 48px;
+  padding: 0 1rem;
+  font-family: var(--ff-mono);
+  font-size: 1.15rem;
+  letter-spacing: 0.12em;
+  color: var(--c-text);
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  outline: none;
+}
+
+.kendra-form__input:focus {
+  border-color: var(--c-brand);
+  box-shadow: 0 0 0 4px var(--c-brand-glow);
+}
+
+.kendra-browse {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 1rem 0 0.5rem;
+}
+
+.kendra-browse__or {
+  font-family: var(--ff-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-text-faint);
+}
+
+.kendra-form__select {
+  flex: 1 1 12rem;
+  min-width: 0;
+  height: 42px;
+  padding: 0 0.75rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--c-text);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+}
+
+.kendra-form__select:disabled { opacity: 0.55; }
+
+.kendra-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.kendra-list > .match-empty { grid-column: 1 / -1; }
+
+.kendra-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1rem 1.15rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-xs);
+}
+
+.kendra-card__top { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+
+.kendra-card__code {
+  font-family: var(--ff-mono);
+  font-size: 0.74rem;
+  color: var(--c-text-faint);
+}
+
+.kendra-card__badge {
+  font-size: 0.7rem;
+  font-weight: var(--fw-semibold);
+  padding: 0.12rem 0.55rem;
+  border-radius: var(--r-pill);
+  background: var(--c-surface-3);
+  color: var(--c-text-muted);
+}
+
+.kendra-card__badge--same_pin { background: var(--c-conf-strong-bg); color: var(--c-conf-strong); }
+
+.kendra-card__address {
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: var(--c-text);
+  overflow-wrap: anywhere;
+}
+
+.kendra-card__place { font-size: 0.82rem; color: var(--c-text-muted); }
+
+.kendra-card__map {
+  margin-top: auto;
+  padding-top: 0.4rem;
+  font-size: 0.84rem;
+  font-weight: var(--fw-semibold);
+  color: var(--c-brand);
+  text-decoration: none;
+}
+
+.kendra-card__map:hover { text-decoration: underline; }
+
+.kendra-more { margin: 1rem auto 0; display: flex; }
+
+.kendra-source {
+  margin-top: 1.25rem;
+  font-size: 0.8rem;
+  color: var(--c-text-muted);
+  line-height: 1.6;
+}
+
+.kendra-prompt {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin: 0.25rem 0 1.25rem;
+  padding: 1.1rem 1.3rem;
+  background: var(--c-jan);
+  border: 1px solid var(--c-jan-border);
+  border-radius: var(--r-lg);
+}
+
+.kendra-prompt__title {
+  font-family: var(--ff-display);
+  font-size: 1.15rem;
+  font-weight: 500;
+  color: var(--c-brand-dark);
+}
+
+.kendra-prompt__body { font-size: 0.86rem; color: var(--c-text-muted); }
+
+.kendra-prompt .btn-primary { flex-shrink: 0; }
+
 /* ── Responsive ─────────────────────────────────────────────── */
 @media (max-width: 760px) {
   .hero { padding-top: 3rem; }
@@ -1922,6 +2120,9 @@ img, svg { display: block; }
   .scan-drop__hint { margin: 0 -1.25rem; padding: 0.7rem 1.25rem; }
 
   .nav-long { display: none; }
+  .kendra-list { grid-template-columns: 1fr; }
+  .kendra-prompt { flex-direction: column; align-items: stretch; }
+  .kendra-prompt .btn-primary { justify-content: center; }
   .scan-summary { flex-direction: column; align-items: stretch; }
   .scan-summary__save { text-align: left; }
   .rx-card__line { flex-direction: column; align-items: flex-start; gap: 0.35rem; }

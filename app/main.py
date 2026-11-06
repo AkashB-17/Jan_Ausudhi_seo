@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.routes.kendras import router as kendras_router
 from app.routes.medicines import router as medicines_router
 from app.routes.prescriptions import router as prescriptions_router
 from app.schemas import HealthResponse
@@ -34,6 +35,7 @@ app.add_middleware(
 
 app.include_router(medicines_router)
 app.include_router(prescriptions_router)
+app.include_router(kendras_router)
 
 
 @app.get("/health", response_model=HealthResponse)

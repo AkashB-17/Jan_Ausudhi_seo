@@ -18,6 +18,7 @@ Always confirm with a doctor or pharmacist before switching medicines.
 | `scripts/build_database.py` | Loads the pipeline outputs into `data/database/medicines.db` (SQLite) |
 | `scripts/matching_experiment.py` | Earlier first-pass matching experiment (not needed to build the DB) |
 | `scripts/make_sample_prescriptions.py` | Generates the sample prescriptions in `samples/` |
+| `scripts/import_kendras.py` | Loads PMBI's Kendra list (PDF export) into `data/database/kendras.db` |
 | `app/` | FastAPI backend (read-only over the SQLite DB) |
 | `app/prescription/` | Prescription scanning: file loading, OCR, brand matching |
 | `index.html`, `frontend/` | Vanilla JS frontend |
@@ -49,6 +50,17 @@ Skip this if you already have `data/database/medicines.db`.
 .venv\Scripts\python.exe scripts\match_validation.py
 .venv\Scripts\python.exe scripts\build_database.py
 ```
+
+For the **Kendra finder**, download the store list: open
+https://janaushadhi.gov.in/locate-kendra, click **Download PDF** (all ~21,700 Kendras),
+save it in `data/raw/`, then import it into `data/database/kendras.db`:
+
+```
+.venv\Scripts\python.exe scripts\import_kendras.py data\raw\kendra_list_2026-11-06.pdf
+```
+
+It is a separate database so rebuilding `medicines.db` keeps it. Owner names in the PDF
+are not imported. Re-run with a newer export to refresh the list.
 
 `match_validation.py` writes `data/processed/` (cleaned CSVs, validated matches, a report).
 It reads hand-checked ingredient synonyms from `data/processed/verified_synonyms.json`
@@ -85,6 +97,10 @@ Open http://127.0.0.1:5500. If the API runs on a port other than 8000, add
   - **Not this one?** buttons to switch to a similar brand.
 
   The recognised text is editable: fix misread names and press **Match again**.
+- **Find Kendra**: enter a PIN code to list Jan Aushadhi Kendras in that PIN and the
+  nearest PINs around it, or browse by state and district. Each store links to Google
+  Maps. The official list has no map coordinates, so "nearest" means the closest PIN
+  number within the same postal sorting district (the first three digits).
 
 ## Tests
 
@@ -107,6 +123,9 @@ The test that loads the real EasyOCR model is skipped by default; set
 | GET | `/compare/{brand_id}/{drug_code}` | Strong-match comparison only |
 | POST | `/prescriptions/scan` | Upload image/PDF (multipart `file`, ≤10 MB, ≤5 pages) |
 | POST | `/prescriptions/match-text` | `{"text": "..."}` — match text (≤200 lines), e.g. corrected OCR output |
+| GET | `/kendras/search?pincode=` | Kendras in a PIN, then nearby PINs (`limit` ≤100, `offset`) |
+| GET | `/kendras/search?state=&district=` | Kendras in a district |
+| GET | `/kendras/states`, `/kendras/districts?state=` | Areas with Kendra counts |
 
 ## How prescription scanning works
 

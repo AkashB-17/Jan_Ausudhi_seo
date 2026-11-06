@@ -78,4 +78,20 @@ export function matchPrescriptionText(text) {
   });
 }
 
+/** GET /kendras/states */
+export function fetchKendraStates() {
+  return request("/kendras/states");
+}
+
+/** GET /kendras/districts?state= */
+export function fetchKendraDistricts(state) {
+  return request(`/kendras/districts?state=${encodeURIComponent(state)}`);
+}
+
+/** GET /kendras/search — by { pincode } or { state, district } */
+export function searchKendras(params, offset = 0) {
+  const query = new URLSearchParams({ ...params, offset: String(offset), limit: "20" });
+  return request(`/kendras/search?${query}`);
+}
+
 export { ApiError };

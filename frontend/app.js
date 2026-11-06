@@ -12,6 +12,9 @@ import {
   fetchComparison,
   scanPrescription,
   matchPrescriptionText,
+  fetchKendraStates,
+  fetchKendraDistricts,
+  searchKendras,
   ApiError,
 } from "./api.js";
 
@@ -29,6 +32,7 @@ const $brandHome    = document.getElementById("brand-home");
 const $searchHint   = document.getElementById("search-hint");
 const $searchWrap   = document.getElementById("search-wrap");
 const $navScan      = document.getElementById("nav-scan");
+const $navKendra    = document.getElementById("nav-kendra");
 const $scanCard     = document.getElementById("scan-card");
 const $scanInput    = document.getElementById("scan-input");
 const $scanDrop     = document.getElementById("scan-drop");
@@ -48,6 +52,7 @@ const hide = (el) => el?.classList.add("hidden");
 function setNav(which) {
   $navSearch.classList.toggle("is-active", which === "search");
   $navScan.classList.toggle("is-active", which === "scan");
+  $navKendra.classList.toggle("is-active", which === "kendra");
   $navHow.classList.toggle("is-active", which === "how");
 }
 
@@ -223,6 +228,7 @@ $searchClear.addEventListener("click", () => {
 $navSearch.addEventListener("click", goHome);
 $navScan.addEventListener("click", () => (lastScan ? renderScanResults(lastScan.data) : renderScanPage()));
 $navHow.addEventListener("click", renderHowPage);
+$navKendra.addEventListener("click", () => renderKendraPage());
 
 $scanInput.addEventListener("change", () => {
   const file = $scanInput.files && $scanInput.files[0];
@@ -689,6 +695,7 @@ function renderComparison(data) {
       <tbody>${rows.join("")}</tbody>
     </table>`;
   $contentArea.appendChild(tableWrap);
+  $contentArea.appendChild(kendraPrompt());
 
   // Medical disclaimer
   const disclaimer = document.createElement("p");
@@ -875,6 +882,7 @@ function renderScanResults(data) {
   list.className = "rx-list fade-in";
   meds.forEach((m, i) => list.appendChild(createRxCard(m, i)));
   $contentArea.appendChild(list);
+  if (withJan > 0) $contentArea.appendChild(kendraPrompt());
 
   if (data.unmatched_lines.length > 0) {
     const other = document.createElement("details");
@@ -1088,6 +1096,198 @@ function renderHowPage() {
 }
 
 /* ── Error handling ─────────────────────────────────────────── */
+/* ── Kendra finder ──────────────────────────────────────────── */
+const KENDRA_PIN_KEY = "ja-kendra-pin";
+const MATCH_TEXT = { same_pin: "Same PIN", nearby_pin: "Nearby PIN" };
+
+function rememberedPin() {
+  try { return localStorage.getItem(KENDRA_PIN_KEY) || ""; } catch (_) { return ""; }
+}
+
+function rememberPin(pin) {
+  try { localStorage.setItem(KENDRA_PIN_KEY, pin); } catch (_) {}
+}
+
+function renderKendraPage() {
+  setNav("kendra");
+  currentBrandId  = null;
+  currentDrugCode = null;
+  setStatus(null);
+  setHomeChrome(false);
+  clearContent();
+
+  const page = document.createElement("section");
+  page.className = "kendra-page fade-in";
+  page.innerHTML = `
+    <h1 class="kendra-page__title">Find a Jan Aushadhi Kendra</h1>
+    <p class="kendra-page__lead">
+      Jan Aushadhi medicines are sold at PMBI Kendras. Enter your PIN code to see the
+      stores in it and the nearest PIN codes around it, or browse by state and district.
+    </p>
+    <form class="kendra-form" id="kendra-pin-form" novalidate>
+      <label class="kendra-form__label" for="kendra-pin">PIN code</label>
+      <div class="kendra-form__row">
+        <input id="kendra-pin" class="kendra-form__input" inputmode="numeric" maxlength="6"
+               autocomplete="postal-code" placeholder="e.g. 110029" pattern="[1-9][0-9]{5}">
+        <button type="submit" class="btn-primary">Find Kendras</button>
+      </div>
+    </form>
+    <div class="kendra-browse">
+      <span class="kendra-browse__or">or browse</span>
+      <label class="sr-only" for="kendra-state">State</label>
+      <select id="kendra-state" class="kendra-form__select"><option value="">State…</option></select>
+      <label class="sr-only" for="kendra-district">District</label>
+      <select id="kendra-district" class="kendra-form__select" disabled><option value="">District…</option></select>
+    </div>
+    <div id="kendra-results" class="kendra-results" aria-live="polite"></div>`;
+  $contentArea.appendChild(page);
+
+  const $pin      = page.querySelector("#kendra-pin");
+  const $state    = page.querySelector("#kendra-state");
+  const $district = page.querySelector("#kendra-district");
+  const $results  = page.querySelector("#kendra-results");
+
+  page.querySelector("#kendra-pin-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const pin = $pin.value.trim();
+    if (!/^[1-9]\d{5}$/.test(pin)) {
+      setStatus("error", "Enter a valid 6-digit PIN code.");
+      $pin.focus();
+      return;
+    }
+    rememberPin(pin);
+    $state.value = "";
+    $district.innerHTML = `<option value="">District…</option>`;
+    $district.disabled = true;
+    loadKendras($results, { pincode: pin });
+  });
+
+  $state.addEventListener("change", async () => {
+    $district.innerHTML = `<option value="">District…</option>`;
+    $district.disabled = true;
+    if (!$state.value) return;
+    try {
+      const districts = await fetchKendraDistricts($state.value);
+      $district.innerHTML += districts
+        .map((d) => `<option value="${escHtml(d.name)}">${escHtml(d.name)} (${d.count})</option>`)
+        .join("");
+      $district.disabled = false;
+      $district.focus();
+    } catch (err) {
+      handleKendraError(err);
+    }
+  });
+
+  $district.addEventListener("change", () => {
+    if (!$district.value) return;
+    $pin.value = "";
+    loadKendras($results, { state: $state.value, district: $district.value });
+  });
+
+  fetchKendraStates()
+    .then((states) => {
+      $state.innerHTML += states
+        .map((s) => `<option value="${escHtml(s.name)}">${escHtml(s.name)} (${s.count})</option>`)
+        .join("");
+      const total = states.reduce((sum, s) => sum + s.count, 0);
+      page.querySelector(".kendra-page__lead").insertAdjacentHTML(
+        "beforeend", ` <strong>${total.toLocaleString("en-IN")} Kendras</strong> are listed.`);
+    })
+    .catch(handleKendraError);
+
+  const saved = rememberedPin();
+  if (saved) {
+    $pin.value = saved;
+    loadKendras($results, { pincode: saved });
+  } else {
+    $pin.focus();
+  }
+}
+
+async function loadKendras($results, params, offset = 0) {
+  setStatus(offset ? null : "loading", "Finding Kendras…");
+  try {
+    const data = await searchKendras(params, offset);
+    setStatus(null);
+    if (offset === 0) {
+      $results.innerHTML = `
+        <p class="section-title">${data.total.toLocaleString("en-IN")} Kendra${data.total === 1 ? "" : "s"}
+          ${params.pincode ? `in and around PIN ${escHtml(params.pincode)}` : `in ${escHtml(data.query)}`}</p>
+        <div class="kendra-list"></div>
+        <p class="kendra-source">
+          From PMBI's official Kendra list (${escHtml(data.source)}). Stores open and close;
+          call ahead or check <a href="https://janaushadhi.gov.in/locate-kendra" target="_blank" rel="noopener">janaushadhi.gov.in</a>.
+          Toll-free helpline 1800-180-8080.
+        </p>`;
+      if (data.total === 0) {
+        $results.querySelector(".kendra-list").innerHTML = `
+          <div class="match-empty">
+            <div class="match-empty__title">No Kendras found</div>
+            <p class="match-empty__body">Try a nearby PIN code, or browse by state and district.</p>
+          </div>`;
+      }
+    }
+    const list = $results.querySelector(".kendra-list");
+    data.kendras.forEach((k) => list.appendChild(createKendraCard(k)));
+    $results.querySelector(".kendra-more")?.remove();
+    const shown = offset + data.kendras.length;
+    if (shown < data.total) {
+      const more = document.createElement("button");
+      more.type = "button";
+      more.className = "btn-secondary kendra-more";
+      more.textContent = `Show more (${(data.total - shown).toLocaleString("en-IN")} left)`;
+      more.addEventListener("click", () => loadKendras($results, params, shown));
+      list.after(more);
+    }
+  } catch (err) {
+    handleKendraError(err);
+  }
+}
+
+function createKendraCard(k) {
+  const card = document.createElement("article");
+  card.className = "kendra-card";
+  const place = [k.district, k.state].filter(Boolean).join(", ");
+  const mapsQuery = `Jan Aushadhi Kendra ${k.address}, ${place} ${k.pincode}`.trim();
+  card.innerHTML = `
+    <div class="kendra-card__top">
+      <span class="kendra-card__code">${escHtml(k.kendra_code)}</span>
+      ${MATCH_TEXT[k.match] ? `<span class="kendra-card__badge kendra-card__badge--${k.match}">${MATCH_TEXT[k.match]}</span>` : ""}
+    </div>
+    <p class="kendra-card__address">${escHtml(k.address || "Address not listed")}</p>
+    <p class="kendra-card__place">${escHtml(place)}${k.pincode ? ` · <strong>${escHtml(k.pincode)}</strong>` : ""}</p>
+    <a class="kendra-card__map" target="_blank" rel="noopener"
+       href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}">
+      Open in Maps <span aria-hidden="true">↗</span>
+    </a>`;
+  return card;
+}
+
+function handleKendraError(err) {
+  if (err instanceof ApiError && err.status !== 0 && typeof err.detail === "string") {
+    setStatus("error", err.detail);
+  } else {
+    setStatus("error", "Could not reach the server. Is the backend running?");
+  }
+}
+
+/** A "find a store" prompt for pages where the user has decided what to buy. */
+function kendraPrompt() {
+  const el = document.createElement("aside");
+  el.className = "kendra-prompt fade-in";
+  el.innerHTML = `
+    <div>
+      <div class="kendra-prompt__title">Buy at a Jan Aushadhi Kendra</div>
+      <p class="kendra-prompt__body">These medicines are sold at PMBI stores. Find one near you by PIN code.</p>
+    </div>
+    <button type="button" class="btn-primary">Find a Kendra</button>`;
+  el.querySelector("button").addEventListener("click", () => {
+    renderKendraPage();
+    window.scrollTo(0, 0);
+  });
+  return el;
+}
+
 function handleError(err) {
   setHomeChrome(false);
   clearContent();

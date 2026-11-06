@@ -209,3 +209,27 @@ class PrescriptionScanResponse(BaseModel):
 
 class PrescriptionTextRequest(BaseModel):
     text: str = Field(min_length=1, max_length=20000)
+
+
+class Kendra(BaseModel):
+    kendra_code: str
+    state: str
+    district: str
+    pincode: str
+    address: str
+    match: Literal["same_pin", "nearby_pin", "district"] = Field(
+        description="same_pin / nearby_pin for PIN searches (nearby = same postal sorting "
+        "district, closest PIN first); district for state/district listings."
+    )
+
+
+class KendraSearchResponse(BaseModel):
+    query: str
+    total: int
+    kendras: list[Kendra]
+    source: str = Field(description="Where and when the Kendra list was imported.")
+
+
+class KendraArea(BaseModel):
+    name: str
+    count: int
