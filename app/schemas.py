@@ -140,6 +140,10 @@ class PrescriptionLine(BaseModel):
     page: int
     text: str
     ocr_confidence: float = Field(description="OCR engine confidence, 0-1. 1.0 for PDF text.")
+    note: str | None = Field(
+        default=None,
+        description="Vision readers only: the line as written and its dosing, for display.",
+    )
 
 
 class DetectedBrand(BaseModel):
@@ -196,6 +200,10 @@ class PrescriptionScanResponse(BaseModel):
     lines: list[PrescriptionLine]
     medicines: list[DetectedMedicine]
     unmatched_lines: list[PrescriptionLine]
+    warning: Literal["not_a_prescription"] | None = Field(
+        default=None,
+        description="Set when the upload has no prescription cues (Rx, Tab/Cap, mg, 1-0-1, BD).",
+    )
     disclaimer: str
 
 

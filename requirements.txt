@@ -3,6 +3,8 @@ uvicorn[standard]>=0.30.0
 pydantic>=2.0.0
 pytest>=8.0.0
 httpx>=0.27.0,<0.28
+# Data pipeline (scripts/)
+pandas>=2.0.0
 # Prescription scanning
 python-multipart>=0.0.9
 rapidfuzz>=3.0.0
@@ -11,5 +13,8 @@ pillow>=10.0.0
 numpy>=1.24.0
 # OCR. For GPU, install torch first from https://download.pytorch.org/whl/cu126
 easyocr>=1.7.0
-# Optional, only for PRESCRIPTION_OCR_ENGINE=trocr:
-# transformers>=4.40.0
+# Optional, only for PRESCRIPTION_OCR_ENGINE=trocr or local-vlm:
+# transformers>=5.0.0
+# accelerate>=1.0.0
+# Optional, only for PRESCRIPTION_OCR_ENGINE=claude:
+# anthropic>=2.0.0

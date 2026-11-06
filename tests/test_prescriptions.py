@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
+import numpy as np
 import pymupdf
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
 from app.main import app
-from app.prescription import ocr
+from app.prescription import ocr, vlm
 from app.prescription.matcher import parse_line
 from app.prescription.ocr import OcrBox, OcrLine, group_into_lines
 
@@ -21,16 +24,19 @@ SAMPLES = Path(__file__).resolve().parents[1] / "samples"
 class FakeEngine:
     name = "fake"
 
-    def __init__(self, lines: list[str]):
+    def __init__(self, lines: list[str | OcrLine]):
         self.lines = lines
 
     def read(self, image):
-        return [OcrLine(text=t, confidence=0.9) for t in self.lines]
+        return [
+            line if isinstance(line, OcrLine) else OcrLine(text=line, confidence=0.9)
+            for line in self.lines
+        ]
 
 
 @pytest.fixture
 def fake_engine():
-    def install(lines: list[str]) -> None:
+    def install(lines: list[str | OcrLine]) -> None:
         ocr.set_engine(FakeEngine(lines))
 
     yield install
@@ -132,6 +138,33 @@ def test_match_text_leaves_non_medicines_unmatched():
     assert len(body["unmatched_lines"]) == 2
 
 
+RESUME_LINES = [
+    "Software Developer | B.Tech Computer Science",
+    "Languages: Python, Java, C++, JavaScript, TypeScript, SQL",
+    "Built REST APIs serving 10k requests per day with 99.9% uptime",
+    "Real time messaging with 500 concurrent users",
+    "Trained CNN model achieving 92% accuracy on 5000 images",
+    "Winner, Smart India Hackathon 2024",
+]
+
+
+def test_match_text_ignores_prose_starting_with_a_brand_word():
+    # "Rest" and "Real" are brand names; the rest of each sentence is not.
+    body = _match_text("\n".join(RESUME_LINES))
+    assert body["medicines"] == []
+
+
+def test_scan_rejects_document_without_prescription_cues():
+    response = client.post(
+        "/prescriptions/scan",
+        files={"file": ("cv.pdf", _pdf_bytes(RESUME_LINES + ["Dolo 650"]), "application/pdf")},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["warning"] == "not_a_prescription"
+    assert body["medicines"] == []
+
+
 def test_match_text_validation():
     assert client.post("/prescriptions/match-text", json={"text": ""}).status_code == 422
     assert client.post("/prescriptions/match-text", json={"text": "  \n "}).status_code == 400
@@ -169,6 +202,85 @@ def test_scan_rejects_unsupported_and_empty_files():
     assert bad.status_code == 400
     empty = client.post("/prescriptions/scan", files={"file": ("a.png", b"", "image/png")})
     assert empty.status_code == 400
+
+
+# ── Vision-language readers ─────────────────────────────────────────
+
+VLM_RESULT = {
+    "is_prescription": True,
+    "medicines": [
+        {
+            "written_as": "Torsemide 5 mg #30 sig i qd in am", "name": "Torsemide",
+            "alternatives": [], "strength": "5mg", "form": "tablet",
+            "dosing": "1 tablet daily in the morning", "legibility": "high",
+        },
+        {
+            # Best guess names no medicine; the second alternative is the real brand.
+            "written_as": "Zqlwo 650 SOS", "name": "Zqlwo",
+            "alternatives": ["Zzqxwv", "Dolo"], "strength": "650", "form": "tablet",
+            "dosing": "when needed", "legibility": "low",
+        },
+    ],
+}
+
+
+def test_vlm_result_becomes_normalised_lines():
+    lines = vlm.result_to_lines(VLM_RESULT)
+    assert [line.text for line in lines] == ["Tab Torsemide 5mg", "Tab Zqlwo 650"]
+    assert lines[1].alternatives == ["Tab Zzqxwv 650", "Tab Dolo 650"]
+    assert lines[1].confidence < 0.5
+    assert "Dosing: 1 tablet daily in the morning" in lines[0].note
+    assert vlm.result_to_lines({"is_prescription": False, "medicines": []}) == []
+
+
+def test_scan_keeps_the_alternative_reading_that_matches(fake_engine):
+    fake_engine(vlm.result_to_lines(VLM_RESULT))
+    response = client.post(
+        "/prescriptions/scan", files={"file": ("rx.png", _png_bytes(), "image/png")}
+    )
+    body = response.json()
+    names = [m["brand"]["name"] if m["brand"] else m["ingredients"] for m in body["medicines"]]
+    assert names == [["torsemide"], "Dolo 650 Tablet"]
+    dolo = body["medicines"][1]
+    assert "alternative_reading" in dolo["review_reasons"]
+    assert "low_ocr_confidence" in dolo["review_reasons"]
+    assert body["medicines"][0]["line"]["note"].startswith("Written: Torsemide")
+
+
+def test_claude_engine_sends_image_and_parses_json(monkeypatch):
+    pytest.importorskip("anthropic")
+    sent = {}
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            sent.update(kwargs)
+            return SimpleNamespace(
+                stop_reason="end_turn",
+                content=[SimpleNamespace(type="text", text=json.dumps(VLM_RESULT))],
+            )
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    engine = vlm.ClaudeVisionEngine()
+    engine._client = SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
+    lines = engine.read(np.full((40, 60, 3), 255, dtype=np.uint8))
+
+    assert [line.text for line in lines] == ["Tab Torsemide 5mg", "Tab Zqlwo 650"]
+    assert sent["model"] == vlm.DEFAULT_CLAUDE_MODEL
+    assert sent["output_config"]["format"]["schema"] == vlm.SCHEMA
+    image_block = sent["messages"][0]["content"][0]
+    assert image_block["type"] == "image" and image_block["source"]["media_type"] == "image/jpeg"
+
+
+def test_claude_engine_reports_refusal(monkeypatch):
+    pytest.importorskip("anthropic")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    engine = vlm.ClaudeVisionEngine()
+    refusal = SimpleNamespace(stop_reason="refusal", content=[])
+    engine._client = SimpleNamespace(
+        beta=SimpleNamespace(messages=SimpleNamespace(create=lambda **_: refusal))
+    )
+    with pytest.raises(ocr.OcrUnavailableError):
+        engine.read(np.full((40, 60, 3), 255, dtype=np.uint8))
 
 
 @pytest.mark.skipif(

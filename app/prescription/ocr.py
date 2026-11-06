@@ -5,6 +5,9 @@ Every engine implements ``read(image) -> list[OcrLine]``. Select one with the
 ``PRESCRIPTION_OCR_ENGINE`` environment variable:
 
   easyocr                 Pretrained EasyOCR detector + recogniser (default).
+  claude                  Claude vision reads the whole page (best on handwriting;
+                          sends the image to Anthropic). See vlm.py.
+  local-vlm               A local vision-language model (Qwen3-VL) on this machine.
   trocr                   EasyOCR text detection + a TrOCR recogniser. Point
                           ``PRESCRIPTION_TROCR_MODEL`` at a fine-tuned
                           checkpoint directory to use your own model.
@@ -20,7 +23,7 @@ import importlib
 import os
 import statistics
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 import numpy as np
@@ -51,6 +54,10 @@ class OcrBox:
 class OcrLine:
     text: str
     confidence: float
+    # Vision-language readers: other plausible readings of the same line, tried
+    # against the dictionary too, and a note shown to the user (verbatim text, dosing).
+    alternatives: list[str] = field(default_factory=list)
+    note: str | None = None
 
 
 class OcrEngine(Protocol):
@@ -214,6 +221,14 @@ def _build_engine(spec: str) -> OcrEngine:
         return EasyOcrEngine()
     if spec == "trocr":
         return TrOcrEngine()
+    if spec == "claude":
+        from app.prescription.vlm import ClaudeVisionEngine
+
+        return ClaudeVisionEngine()
+    if spec == "local-vlm":
+        from app.prescription.vlm import LocalVisionEngine
+
+        return LocalVisionEngine()
     if ":" in spec:
         module_name, attr = spec.split(":", 1)
         factory = getattr(importlib.import_module(module_name), attr)

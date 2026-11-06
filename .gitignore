@@ -42,3 +42,6 @@ Thumbs.db
 .vscode/
 .idea/
 .data/processed/brands_clean.csv
+
+/report.md
+

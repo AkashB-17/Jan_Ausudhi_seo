@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 
 from app.prescription.documents import PageInput, load_document
-from app.prescription.matcher import LineMatch, MedicineDictionary, get_dictionary
+from app.prescription.matcher import LineMatch, MedicineDictionary, get_dictionary, parse_line
 from app.prescription.ocr import OcrLine, get_engine
 from app.schemas import (
     DetectedBrand,
@@ -33,20 +33,26 @@ PMBI_COLUMNS = (
 def scan_document(conn: sqlite3.Connection, data: bytes) -> PrescriptionScanResponse:
     pages = load_document(data)
     lines: list[PrescriptionLine] = []
+    alternatives: list[list[str]] = []
     used_ocr = False
     engine_name = "pdf-text"
     for page in pages:
         for ocr_line in _read_page(page):
             lines.append(
                 PrescriptionLine(
-                    page=page.page, text=ocr_line.text, ocr_confidence=ocr_line.confidence
+                    page=page.page, text=ocr_line.text,
+                    ocr_confidence=ocr_line.confidence, note=ocr_line.note,
                 )
             )
+            alternatives.append(ocr_line.alternatives)
         if not page.has_text_layer:
             used_ocr = True
     if used_ocr:
         engine_name = get_engine().name
-    return match_lines(conn, lines, engine=engine_name, pages=len(pages))
+    return match_lines(
+        conn, lines, engine=engine_name, pages=len(pages),
+        require_prescription=True, alternatives=alternatives,
+    )
 
 
 def _read_page(page: PageInput) -> list[OcrLine]:
@@ -60,12 +66,33 @@ def match_lines(
     lines: list[PrescriptionLine],
     engine: str,
     pages: int,
+    require_prescription: bool = False,
+    alternatives: list[list[str]] | None = None,
 ) -> PrescriptionScanResponse:
+    """
+    ``require_prescription`` is for uploads: a document with no line that looks like a
+    prescription line (a CV, an invoice) returns no medicines rather than chance
+    brand-name matches. Text the user typed or corrected is matched as given.
+
+    ``alternatives`` holds other readings of each line from a vision reader; the one
+    that matches the dictionary best is kept.
+    """
     dictionary = get_dictionary(conn)
+    if require_prescription and not any(parse_line(line.text).strong_cue for line in lines):
+        return PrescriptionScanResponse(
+            engine=engine,
+            pages=pages,
+            lines=lines,
+            medicines=[],
+            unmatched_lines=lines,
+            warning="not_a_prescription",
+            disclaimer=DISCLAIMER,
+        )
     medicines: list[DetectedMedicine] = []
     unmatched: list[PrescriptionLine] = []
-    for line in lines:
-        match = dictionary.match_line(line.text, line.ocr_confidence)
+    for i, line in enumerate(lines):
+        others = alternatives[i] if alternatives else []
+        match = _best_reading(dictionary, line, others)
         if match is None:
             unmatched.append(line)
             continue
@@ -78,6 +105,20 @@ def match_lines(
         unmatched_lines=unmatched,
         disclaimer=DISCLAIMER,
     )
+
+
+def _best_reading(
+    dictionary: MedicineDictionary, line: PrescriptionLine, others: list[str]
+) -> LineMatch | None:
+    best = dictionary.match_line(line.text, line.ocr_confidence)
+    for text in others:
+        match = dictionary.match_line(text, line.ocr_confidence)
+        # An alternative must beat the primary reading clearly, not tie it.
+        if match and (best is None or match.score > best.score + 2):
+            best = match
+            best.needs_review = True
+            best.review_reasons.append("alternative_reading")
+    return best
 
 
 def _build_medicine(

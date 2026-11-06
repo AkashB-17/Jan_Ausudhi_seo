@@ -516,7 +516,7 @@ function renderComparison(data) {
 
   // Back button
   const back = makeBackButton(
-    `← Back to ${shortBrandLabel(data.brand.name)}`,
+    `Back to ${shortBrandLabel(data.brand.name)}`,
     () => navigateToBrand(data.brand.brand_id),
   );
   $contentArea.appendChild(back);
@@ -713,6 +713,7 @@ const REVIEW_TEXT = {
   ambiguous_name:        "Several similar brand names",
   low_ocr_confidence:    "Handwriting was hard to read",
   no_jan_aushadhi_match: "No Jan Aushadhi equivalent found",
+  alternative_reading:   "Matched another possible reading of the handwriting",
 };
 
 const SOURCE_TEXT = {
@@ -847,7 +848,18 @@ function renderScanResults(data) {
     $contentArea.appendChild(preview);
   }
 
-  if (meds.length === 0) {
+  if (data.warning === "not_a_prescription") {
+    const empty = document.createElement("div");
+    empty.className = "match-empty fade-in";
+    empty.innerHTML = `
+      <div class="match-empty__icon" aria-hidden="true">📄</div>
+      <div class="match-empty__title">This doesn't look like a prescription</div>
+      <p class="match-empty__body">
+        No line had medicine details such as Tab/Cap, a strength (500 mg) or dosing (1-0-1, BD).
+        If it is a prescription, correct the recognised text below and match again.
+      </p>`;
+    $contentArea.appendChild(empty);
+  } else if (meds.length === 0) {
     const empty = document.createElement("div");
     empty.className = "match-empty fade-in";
     empty.innerHTML = `
@@ -984,6 +996,7 @@ function createRxCard(med, index) {
       <span class="rx-card__read">Read as “${escHtml(med.line.text)}”</span>
       ${badge}
     </div>
+    ${med.line.note ? `<p class="rx-card__note">${escHtml(med.line.note)}</p>` : ""}
     ${headHtml}
     ${reasonsHtml}
     ${janHtml}

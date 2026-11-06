@@ -56,6 +56,9 @@ HEADER_MARKERS = {
     "weight", "bp", "pulse", "email",
 }
 
+# Dosing abbreviations: seeing one marks the line as a prescription line.
+DOSING_WORDS = {"od", "bd", "bid", "tds", "tid", "qid", "qds", "hs", "sos", "prn", "stat"}
+
 SCHEDULE_RE = re.compile(r"\b\d\s*[-+]\s*\d\s*[-+]\s*\d(?:\s*[-+]\s*\d)?\b")
 DURATION_RE = re.compile(r"\b\d+\s*(?:days?|d|weeks?|wks?|months?|times?)\b")
 TIMES_RE = re.compile(r"\bx\s*\d+\b")
@@ -63,6 +66,7 @@ DATE_RE = re.compile(r"\b\d{1,2}\s*[/.-]\s*\d{1,2}\s*[/.-]\s*\d{2,4}\b")
 # "10ml" on a syrup line is the dose volume; "125mg/5ml" is a strength and is kept.
 DOSE_VOLUME_RE = re.compile(r"(?<![/\d.])\d+(?:\.\d+)?\s*(?:ml|tsp|drops?)\b")
 LIST_MARKER_RE = re.compile(r"^\s*(?:℞|rx\b\.?|\d{1,2}\s*[.)\]:-](?!\d))\s*")
+UNIT_STRENGTH_RE = re.compile(r"\b\d+(?:\.\d+)?\s*(?:mg|mcg|ml|gm|g|iu)\b")
 TOKEN_RE = re.compile(r"[a-z]+|\d+(?:\.\d+)?")
 NUMBER_RE = re.compile(r"\d+(?:\.\d+)?")
 
@@ -73,8 +77,16 @@ CONFIDENT_KEY_SCORE = 85
 GENERIC_CUTOFF = 88
 CONFIDENT_SCORE = 88
 REVIEW_SCORE = 75
-# Lines without a form word or strength are often names, addresses or notes.
+# A bare number ("Dolo 650") is a weaker cue than a form word or unit: CVs, invoices
+# and letters are full of numbers too.
+NUMBER_CUE_MIN_SCORE = 85
+# Lines without any cue are often names, addresses or notes.
 NO_CUE_MIN_SCORE = 92
+# Share of the line's name words the matched brand must account for. Stops a sentence
+# whose first word happens to be a brand ("Rest APIs serving requests") from matching.
+MIN_COVERAGE = 0.5
+# Medicine lines have a few name words once dosing is removed; longer lines are prose.
+MAX_NAME_WORDS = 6
 LOW_OCR_CONFIDENCE = 0.5
 
 
@@ -84,7 +96,9 @@ class ParsedLine:
     words: list[str]
     numbers: set[float]
     form: str | None
+    # Bare numbers count; strong_cue needs Rx, a form word, a unit or dosing instructions.
     has_cue: bool
+    strong_cue: bool = False
 
 
 def _to_number(token: str) -> float | None:
@@ -99,8 +113,14 @@ def parse_line(text: str) -> ParsedLine:
     lowered = text.lower()
     if HEADER_MARKERS & set(TOKEN_RE.findall(lowered)):
         return ParsedLine(raw=text, words=[], numbers=set(), form=None, has_cue=False)
-    has_cue = bool(re.match(r"^\s*(?:℞|rx\b)", lowered))
     cleaned = DATE_RE.sub(" ", lowered)
+    strong_cue = bool(
+        re.match(r"^\s*(?:℞|rx\b)", lowered)
+        or UNIT_STRENGTH_RE.search(cleaned)
+        or SCHEDULE_RE.search(cleaned)
+        or TIMES_RE.search(cleaned)
+        or DOSING_WORDS & set(TOKEN_RE.findall(cleaned))
+    )
     cleaned = LIST_MARKER_RE.sub(" ", cleaned)
     # TIMES_RE first: "x 5 days" must go as a whole, not leave a stray "x".
     for pattern in (SCHEDULE_RE, TIMES_RE, DURATION_RE, DOSE_VOLUME_RE):
@@ -121,8 +141,11 @@ def parse_line(text: str) -> ParsedLine:
         if token in UNITS or token in NOISE:
             continue
         words.append(token)
-    has_cue = has_cue or form is not None or bool(numbers)
-    return ParsedLine(raw=text, words=words, numbers=numbers, form=form, has_cue=has_cue)
+    strong_cue = strong_cue or form is not None
+    return ParsedLine(
+        raw=text, words=words, numbers=numbers, form=form,
+        has_cue=strong_cue or bool(numbers), strong_cue=strong_cue,
+    )
 
 
 def _norm_strength(strength: str | None) -> str:
@@ -134,6 +157,21 @@ def _brand_words(name: str) -> list[str]:
         t for t in TOKEN_RE.findall(name.lower())
         if not t[0].isdigit() and t not in BRAND_FORM_WORDS and t not in UNITS
     ]
+
+
+def _coverage(query_words: list[str], brand_words: list[str]) -> float:
+    """Share of query words that appear (fuzzily) in the brand name."""
+    if not query_words:
+        return 0.0
+    brand_text = "".join(brand_words)
+    found = 0
+    for word in query_words:
+        if any(fuzz.ratio(word, b) >= 75 for b in brand_words):
+            found += 1
+        # OCR splits words ("augmen tin"); a long fragment of the brand still counts.
+        elif len(word) >= 4 and word in brand_text:
+            found += 1
+    return found / len(query_words)
 
 
 @dataclass
@@ -165,6 +203,8 @@ class BrandCandidate:
     key_score: float
     strength_matched: bool | None
     form_matched: bool | None
+    # Share of the line's name words found in the brand name.
+    coverage: float = 1.0
 
     @property
     def score(self) -> float:
@@ -328,6 +368,7 @@ class MedicineDictionary:
                 BrandCandidate(
                     brand.brand_id, brand.name, score, key_score,
                     strength_matched, form_matched,
+                    _coverage(parsed.words, brand.words),
                 )
             )
 
@@ -430,6 +471,8 @@ class MedicineDictionary:
         parsed = parse_line(text)
         if not parsed.words:
             return None
+        if len(parsed.words) > MAX_NAME_WORDS:
+            return None
         brands = self.match_brands(parsed)
         generic = self.match_generic(parsed)
         brand_score = brands[0].score if brands else 0.0
@@ -440,7 +483,11 @@ class MedicineDictionary:
             if generic.strength_matched is False:
                 reasons.append("strength_not_found")
             brands = []
-        elif brands and brands[0].key_score >= MIN_KEY_SCORE:
+        elif (
+            brands
+            and brands[0].key_score >= MIN_KEY_SCORE
+            and brands[0].coverage >= MIN_COVERAGE
+        ):
             kind, score = "brand", brand_score
             top = brands[0]
             if top.key_score < CONFIDENT_KEY_SCORE:
@@ -455,7 +502,12 @@ class MedicineDictionary:
         else:
             return None
 
-        min_score = REVIEW_SCORE if parsed.has_cue else NO_CUE_MIN_SCORE
+        if parsed.strong_cue:
+            min_score = REVIEW_SCORE
+        elif parsed.has_cue:
+            min_score = NUMBER_CUE_MIN_SCORE
+        else:
+            min_score = NO_CUE_MIN_SCORE
         if score < min_score:
             return None
         if score < CONFIDENT_SCORE:
